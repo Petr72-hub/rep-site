@@ -1,0 +1,61 @@
+{
+  "brand": {
+    "name": "КЭТАЛИЗАТОР",
+    "tagline": "Запускаем реакцию понимания",
+    "subjects": [
+      "Биология",
+      "Химия"
+    ],
+    "colors": {
+      "background": "#07090D",
+      "white": "#F7F9FB",
+      "acidLime": "#C7FF2F",
+      "electricBlue": "#4169FF"
+    }
+  },
+  "teacher": {
+    "name": "Пётр Кудрин",
+    "positioning": "Преподаватель и наставник по биологии и химии",
+    "facts": [
+      "3 года — педагог дополнительного образования в Физтех-лицее им. П. Л. Капицы",
+      "3 года индивидуальной репетиторской практики",
+      "Педагогическое образование",
+      "Квалификация лаборанта химико-бактериологического анализа",
+      "Обучение по специальности «Педиатрия»"
+    ]
+  },
+  "tariffs": [
+    {
+      "name": "Старт",
+      "lessons": "7+1",
+      "baseLessons": 7,
+      "bonusLessons": 1
+    },
+    {
+      "name": "Ускорение",
+      "lessons": "13+3",
+      "baseLessons": 13,
+      "bonusLessons": 3
+    },
+    {
+      "name": "Катализ",
+      "lessons": "28+5",
+      "baseLessons": 28,
+      "bonusLessons": 5
+    }
+  ],
+  "referral": {
+    "discountPercent": 15,
+    "rule": "Если приведённый друг покупает тариф, ученик получает скидку 15% на покупку следующего тарифа"
+  },
+  "links": {
+    "trialBot": "https://t.me/catalisator_rep_bot",
+    "telegramChannel": "https://t.me/catalisator_rep",
+    "contact": "https://max.ru/u/f9LHodD0cOKz8u-ONa0H9h4THAJk7FckAPWvpkYEHCgTTvvI0jmM8DdzvXI",
+    "max": "https://max.ru/u/f9LHodD0cOKz8u-ONa0H9h4THAJk7FckAPWvpkYEHCgTTvvI0jmM8DdzvXI",
+    "vk": "https://vk.ru/catalizator_rep",
+    "youtube": "#",
+    "telegramBooking": "https://t.me/catalisator_rep_bot",
+    "maxBooking": "https://max.ru/u/f9LHodD0cOKz8u-ONa0H9h4THAJk7FckAPWvpkYEHCgTTvvI0jmM8DdzvXI"
+  }
+}
