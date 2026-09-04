@@ -136,7 +136,9 @@
     el.rel = 'noopener noreferrer';
   };
 
-  fetch('data.json').then(r => r.ok ? r.json() : null).then(data => {
+  // Абсолютный путь: со страниц в подпапках (/blog/...) относительный
+  // 'data.json' резолвился бы в /blog/data.json и всегда давал 404.
+  fetch('/data.json').then(r => r.ok ? r.json() : null).then(data => {
     if (!data?.links) return;
     const L = data.links;
 
