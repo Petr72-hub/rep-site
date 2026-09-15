@@ -8,3 +8,5 @@ assets/_original/
 .DS_Store
 Thumbs.db
 .claude
+# Служебные файлы Serena
+.serena/

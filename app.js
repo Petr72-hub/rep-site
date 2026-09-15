@@ -1,167 +1,334 @@
+/* КЭТАЛИЗАТОР · интерактив и моушен.
+   Без библиотек: IntersectionObserver, CSS-анимации, pointer-события.
+   Скролл-листенеров нет: состояние шапки, активный раздел и появления
+   считаются через IntersectionObserver. */
 (() => {
-  const mq = window.matchMedia('(max-width:1100px)');
+  const d = document;
+  const root = d.documentElement;
+  const $ = (s, c = d) => c.querySelector(s);
+  const $$ = (s, c = d) => [...c.querySelectorAll(s)];
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const fine = matchMedia('(hover: hover) and (pointer: fine)').matches;
 
-  /* ------------------------------------------------------------------
-     Мобильное меню.
-     Кроме открытия/закрытия по кнопке: Esc, клик мимо меню, поворот
-     экрана и переход на десктопную ширину. Пока меню открыто, фон
-     не прокручивается, а закрытое меню недоступно с клавиатуры.
-     ------------------------------------------------------------------ */
-  const menuBtn = document.querySelector('.menu-button');
-  const mobileMenu = document.querySelector('.mobile-menu');
+  root.classList.add('is-ready');
 
-  const setMenu = open => {
-    if (!menuBtn || !mobileMenu) return;
-    menuBtn.classList.toggle('active', open);
-    mobileMenu.classList.toggle('open', open);
+  /* ---------- пословная разбивка заголовков ---------- */
+  const split = el => {
+    let i = 0;
+    const walk = node => {
+      [...node.childNodes].forEach(n => {
+        if (n.nodeType === 3) {
+          const frag = d.createDocumentFragment();
+          n.textContent.split(/(\s+)/).forEach(part => {
+            if (!part) return;
+            if (/^\s+$/.test(part)) { frag.append(' '); return; }
+            const w = d.createElement('span');
+            w.className = 'w';
+            const inner = d.createElement('span');
+            inner.style.setProperty('--wi', i++);
+            inner.textContent = part;
+            w.append(inner);
+            frag.append(w);
+          });
+          n.replaceWith(frag);
+        } else if (n.nodeType === 1 && n.tagName !== 'BR') walk(n);
+      });
+    };
+    walk(el);
+  };
+  if (!reduce) $$('[data-split]').forEach(split);
+
+  /* ---------- появление при скролле ---------- */
+  const revealTargets = $$('[data-reveal],[data-split],.chart,.flow,.chain,.plan,.method-media,.app-stage');
+  const revealIO = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (!e.isIntersecting) return;
+      e.target.classList.add('is-in');
+      revealIO.unobserve(e.target);
+    });
+  }, { threshold: 0.15, rootMargin: '0px 0px -6% 0px' });
+  revealTargets.forEach(el => revealIO.observe(el));
+
+  /* ---------- шапка: фон после начала скролла ---------- */
+  const sentinel = $('#scroll-sentinel');
+  if (sentinel) {
+    new IntersectionObserver(([e]) => root.classList.toggle('is-scrolled', !e.isIntersecting)).observe(sentinel);
+  }
+
+  /* ---------- активный раздел в навигации ---------- */
+  const nav = $('.nav');
+  const indicator = $('.nav-indicator');
+  const navLinks = $$('.nav a[href^="#"], .sheet-nav a[href^="#"]');
+  const moveIndicator = link => {
+    if (!indicator) return;
+    if (!link) { indicator.style.opacity = '0'; return; }
+    indicator.style.width = `${link.offsetWidth}px`;
+    indicator.style.transform = `translateX(${link.offsetLeft}px)`;
+    indicator.style.opacity = '1';
+  };
+  let current = null;
+  const setActive = id => {
+    if (id === current) return;
+    current = id;
+    navLinks.forEach(a => {
+      const on = a.getAttribute('href') === `#${id}`;
+      a.classList.toggle('is-active', on);
+      if (on) a.setAttribute('aria-current', 'true'); else a.removeAttribute('aria-current');
+    });
+    moveIndicator(nav && id ? $(`a[href="#${id}"]`, nav) : null);
+  };
+  const navIO = new IntersectionObserver(entries => {
+    entries.forEach(e => { if (e.isIntersecting) setActive(e.target.dataset.nav || null); });
+  }, { rootMargin: '-42% 0px -56% 0px' });
+  $$('main > section').forEach(s => navIO.observe(s));
+  addEventListener('resize', () => nav && current && moveIndicator($(`a[href="#${current}"]`, nav)), { passive: true });
+
+  /* ---------- мобильная шторка ---------- */
+  const sheet = $('#menu');
+  const menuBtn = $('.menu-btn');
+  let lastFocus = null;
+  const focusables = () => $$('a[href], button:not([disabled])', sheet).filter(el => !el.hidden);
+  const setSheet = (open, restore = true) => {
+    sheet.classList.toggle('is-open', open);
+    sheet.setAttribute('aria-hidden', String(!open));
+    sheet.inert = !open;
     menuBtn.setAttribute('aria-expanded', String(open));
     menuBtn.setAttribute('aria-label', open ? 'Закрыть меню' : 'Открыть меню');
-    mobileMenu.setAttribute('aria-hidden', String(!open));
-    // Закрытое меню не должно ловить фокус табом.
-    mobileMenu.querySelectorAll('a').forEach(a => a.tabIndex = open ? 0 : -1);
-    document.body.style.overflow = open ? 'hidden' : '';
+    root.classList.toggle('is-locked', open);
+    if (open) setTimeout(() => focusables()[0]?.focus(), 60);
+    else if (restore) menuBtn.focus();
   };
-
-  if (menuBtn && mobileMenu) {
-    setMenu(false);
-    menuBtn.addEventListener('click', () => setMenu(!menuBtn.classList.contains('active')));
-    mobileMenu.querySelectorAll('a').forEach(a => a.addEventListener('click', () => setMenu(false)));
-    document.addEventListener('keydown', e => {
-      if (e.key === 'Escape' && menuBtn.classList.contains('active')) {
-        setMenu(false);
-        menuBtn.focus();
-      }
+  if (sheet && menuBtn) {
+    setSheet(false, false);
+    menuBtn.addEventListener('click', () => setSheet(!sheet.classList.contains('is-open')));
+    $$('[data-close]', sheet).forEach(el => el.addEventListener('click', () => setSheet(false)));
+    $$('a', sheet).forEach(a => a.addEventListener('click', () => setSheet(false, false)));
+    sheet.addEventListener('keydown', e => {
+      if (e.key === 'Escape') setSheet(false);
+      if (e.key !== 'Tab') return;
+      const f = focusables();
+      if (!f.length) return;
+      if (e.shiftKey && d.activeElement === f[0]) { e.preventDefault(); f[f.length - 1].focus(); }
+      else if (!e.shiftKey && d.activeElement === f[f.length - 1]) { e.preventDefault(); f[0].focus(); }
     });
-    document.addEventListener('click', e => {
-      if (!menuBtn.classList.contains('active')) return;
-      if (mobileMenu.contains(e.target) || menuBtn.contains(e.target)) return;
-      setMenu(false);
-    });
-    mq.addEventListener('change', e => { if (!e.matches) setMenu(false); });
+    matchMedia('(min-width: 1024px)').addEventListener('change', e => e.matches && setSheet(false, false));
   }
 
-  /* ------------------------------------------------------------------
-     Состояние шапки и подсветка активного раздела.
-     Считаем по getBoundingClientRect (а не offsetTop): секции лежат
-     внутри разных обёрток, и offsetTop у них отсчитывается от разных
-     родителей. Пересчёт — раз в кадр.
-     ------------------------------------------------------------------ */
-  const siteHeader = document.querySelector('.site-header');
-  const navLinks = [...document.querySelectorAll('.desktop-nav a[href^="#"]')];
-  const navTargets = navLinks
-    .map(link => ({ link, section: document.querySelector(link.getAttribute('href')) }))
-    .filter(item => item.section);
-
-  let ticking = false;
-  const updateHeaderState = () => {
-    ticking = false;
-    siteHeader?.classList.toggle('scrolled', window.scrollY > 28);
-
-    const marker = Math.min(window.innerHeight * 0.32, 260);
-    let current = null;
-    navTargets.forEach(item => {
-      if (item.section.getBoundingClientRect().top <= marker) current = item;
+  /* ---------- мобильный док: виден между hero и блоком записи ---------- */
+  const dock = $('.dock');
+  const hero = $('.hero');
+  const trial = $('#trial');
+  if (dock && hero && trial) {
+    const seen = new Map([[hero, true], [trial, false]]);
+    const sync = () => {
+      const show = !seen.get(hero) && !seen.get(trial);
+      dock.classList.toggle('is-visible', show);
+      dock.inert = !show;
+    };
+    const io = new IntersectionObserver(entries => {
+      entries.forEach(e => seen.set(e.target, e.isIntersecting));
+      sync();
     });
-    navLinks.forEach(link => link.classList.remove('active'));
-    current?.link.classList.add('active');
-  };
-  const requestUpdate = () => {
-    if (ticking) return;
-    ticking = true;
-    requestAnimationFrame(updateHeaderState);
-  };
-  updateHeaderState();
-  window.addEventListener('scroll', requestUpdate, { passive: true });
-  window.addEventListener('resize', requestUpdate, { passive: true });
+    io.observe(hero);
+    io.observe(trial);
+    sync();
+  }
 
-  /* ---------------------- Появление блоков при скролле ---------------- */
-  const revealEls = [...document.querySelectorAll('.reveal')];
-  revealEls.forEach(el => {
-    const delay = el.dataset.delay || 0;
-    el.style.transitionDelay = `${delay}ms`;
+  /* ---------- счётчики ---------- */
+  const countIO = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (!e.isIntersecting) return;
+      countIO.unobserve(e.target);
+      const el = e.target;
+      const to = +el.dataset.count;
+      if (reduce) return;
+      const t0 = performance.now();
+      const tick = t => {
+        const p = Math.min((t - t0) / 1100, 1);
+        el.textContent = Math.round(to * (1 - Math.pow(1 - p, 3)));
+        if (p < 1) requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    });
+  }, { threshold: 0.6 });
+  $$('[data-count]').forEach(el => countIO.observe(el));
+
+  /* ---------- тарифы: точки занятий ---------- */
+  $$('.dots').forEach(box => {
+    const base = +box.dataset.base;
+    const bonus = +box.dataset.bonus;
+    const frag = d.createDocumentFragment();
+    for (let i = 0; i < base + bonus; i++) {
+      const dot = d.createElement('i');
+      if (i >= base) dot.className = 'bonus';
+      dot.style.setProperty('--i', i);
+      frag.append(dot);
+    }
+    box.append(frag);
   });
-  const observer = new IntersectionObserver(entries => {
-    entries.forEach(entry => {
-      if (entry.isIntersecting) {
-        entry.target.classList.add('visible');
-        observer.unobserve(entry.target);
-      }
+
+  /* ---------- цепочка «Мой подход»: линия через все атомы ---------- */
+  const chain = $('.chain');
+  const chainSvg = chain && $('.chain-svg', chain);
+  const drawChain = () => {
+    // offset* не учитывают transform, поэтому линия не «съезжает»,
+    // пока карточки ещё в стартовой позиции анимации появления.
+    const box = { width: chain.clientWidth, height: chain.clientHeight };
+    const pts = $$('.atom', chain).map(a => {
+      const s = a.offsetParent;
+      return [s.offsetLeft + a.offsetLeft + a.offsetWidth / 2, s.offsetTop + a.offsetTop + a.offsetHeight / 2];
     });
-  }, { threshold: 0.12 });
-  revealEls.forEach(el => observer.observe(el));
-
-  /* ---------------------- Лента материалов ---------------------------- */
-  const rail = document.querySelector('.materials-rail');
-  const prev = document.querySelector('.rail-prev');
-  const next = document.querySelector('.rail-next');
-  const moveRail = direction => {
-    if (!rail) return;
-    const card = rail.querySelector('.material-card');
-    if (!card) return;
-    rail.scrollBy({ left: direction * (card.getBoundingClientRect().width + 20), behavior: 'smooth' });
+    if (pts.length < 2) return;
+    // Соединяем только соседей по строке или по колонке: переход на новую
+    // строку сетки не рисуем, иначе линия режет карточки по диагонали.
+    let path = `M${pts[0][0]},${pts[0][1]}`;
+    for (let i = 1; i < pts.length; i++) {
+      const [x0, y0] = pts[i - 1];
+      const [x1, y1] = pts[i];
+      const aligned = Math.abs(y0 - y1) < 1 || Math.abs(x0 - x1) < 1;
+      path += `${aligned ? ' L' : ' M'}${x1},${y1}`;
+    }
+    chainSvg.setAttribute('width', box.width);
+    chainSvg.setAttribute('height', box.height);
+    chainSvg.setAttribute('viewBox', `0 0 ${box.width} ${box.height}`);
+    $('path', chainSvg).setAttribute('d', path);
   };
-  prev?.addEventListener('click', () => moveRail(-1));
-  next?.addEventListener('click', () => moveRail(1));
-  // Стрелки бесполезны, когда прокручивать нечего.
-  const syncRailButtons = () => {
-    if (!rail || !prev || !next) return;
-    const max = rail.scrollWidth - rail.clientWidth - 1;
-    prev.disabled = rail.scrollLeft <= 0;
-    next.disabled = rail.scrollLeft >= max;
-  };
-  rail?.addEventListener('scroll', syncRailButtons, { passive: true });
-  window.addEventListener('resize', syncRailButtons, { passive: true });
-  syncRailButtons();
+  // ResizeObserver срабатывает сразу после первой раскладки и при смене
+  // шрифтов/ширины, поэтому отдельный синхронный вызов не нужен.
+  if (chainSvg) new ResizeObserver(drawChain).observe(chain);
 
-  /* ---------------------- Подсветка за курсором ----------------------- */
-  const glow = document.querySelector('.cursor-glow');
-  if (glow && matchMedia('(pointer:fine)').matches) {
-    window.addEventListener('pointermove', e => {
-      glow.style.left = `${e.clientX}px`;
-      glow.style.top = `${e.clientY}px`;
-    }, { passive: true });
-  } else if (glow) {
-    glow.remove();
+  /* ---------- материалы: колода + просмотр ---------- */
+  const deck = $('.deck');
+  if (deck) {
+    const cards = $$('.deck-card', deck);
+    const tabs = $$('.mat-tab');
+    const caption = $('.mat-caption');
+    const lightbox = $('#lightbox');
+    const lbImg = lightbox && $('img', lightbox);
+    let active = 0;
+    const show = idx => {
+      active = (idx + cards.length) % cards.length;
+      cards.forEach((c, i) => {
+        const pos = (i - active + cards.length) % cards.length;
+        c.dataset.pos = pos;
+        c.tabIndex = pos === 0 ? 0 : -1;
+        c.setAttribute('aria-hidden', String(pos !== 0));
+      });
+      tabs.forEach((t, i) => {
+        t.setAttribute('aria-selected', String(i === active));
+        t.tabIndex = i === active ? 0 : -1;
+      });
+      if (caption) caption.textContent = cards[active].dataset.caption || '';
+    };
+    const open = () => {
+      if (!lightbox?.showModal) return;
+      const c = cards[active];
+      lbImg.src = c.dataset.full;
+      lbImg.alt = $('img', c).alt;
+      lightbox.showModal();
+    };
+    tabs.forEach((t, i) => {
+      t.addEventListener('click', () => show(i));
+      t.addEventListener('keydown', e => {
+        if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+        e.preventDefault();
+        show(active + (e.key === 'ArrowRight' ? 1 : -1));
+        tabs[active].focus();
+      });
+    });
+    cards.forEach((c, i) => c.addEventListener('click', () => (i === active ? open() : show(i))));
+    $('.deck-zoom')?.addEventListener('click', open);
+    lightbox?.addEventListener('click', e => { if (e.target === lightbox) lightbox.close(); });
+    show(0);
   }
 
-  /* ------------------------------------------------------------------
-     Ссылки из data.json (нужен локальный или обычный веб-сервер).
-     Весь контент уже есть в index.html, поэтому при открытии файла
-     напрямую сайт работает — просто без переопределения ссылок.
-     ------------------------------------------------------------------ */
-  const applyLink = (el, url) => {
-    if (!url || url === '#') return;
-    el.href = url;
-    el.target = '_blank';
-    el.rel = 'noopener noreferrer';
-  };
+  /* ---------- маскот реагирует на CTA пробного урока ---------- */
+  const trialCard = $('.trial-card');
+  if (trialCard) {
+    if (fine) {
+      let t;
+      $$('.trial-cta .btn', trialCard).forEach(b => {
+        const on = () => { clearTimeout(t); trialCard.classList.add('is-react'); };
+        const off = () => { t = setTimeout(() => trialCard.classList.remove('is-react'), 500); };
+        b.addEventListener('pointerenter', on);
+        b.addEventListener('focus', on);
+        b.addEventListener('pointerleave', off);
+        b.addEventListener('blur', off);
+      });
+    } else {
+      const io = new IntersectionObserver(([e]) => {
+        if (!e.isIntersecting) return;
+        setTimeout(() => trialCard.classList.add('is-react'), 700);
+        io.disconnect();
+      }, { threshold: 0.5 });
+      io.observe(trialCard);
+    }
+  }
 
-  // Абсолютный путь: со страниц в подпапках (/blog/...) относительный
-  // 'data.json' резолвился бы в /blog/data.json и всегда давал 404.
-  fetch('/data.json').then(r => r.ok ? r.json() : null).then(data => {
-    if (!data?.links) return;
-    const L = data.links;
+  /* ---------- pointer-эффекты: только мышь и без reduced motion ---------- */
+  if (fine && !reduce) {
+    const layers = $$('[data-depth]');
+    if (hero && layers.length) {
+      let raf = 0, nx = 0, ny = 0;
+      const apply = () => {
+        raf = 0;
+        layers.forEach(l => {
+          const k = +l.dataset.depth;
+          l.style.transform = `translate3d(${(nx * k).toFixed(1)}px,${(ny * k).toFixed(1)}px,0)`;
+        });
+      };
+      hero.addEventListener('pointermove', e => {
+        const r = hero.getBoundingClientRect();
+        nx = (e.clientX - r.left) / r.width - 0.5;
+        ny = (e.clientY - r.top) / r.height - 0.5;
+        if (!raf) raf = requestAnimationFrame(apply);
+      }, { passive: true });
+      hero.addEventListener('pointerleave', () => { nx = ny = 0; if (!raf) raf = requestAnimationFrame(apply); });
+    }
 
-    // Важно: якоря "#trial" — это внутренняя прокрутка к блоку записи.
-    // Их подменять на внешний адрес нельзя, иначе кнопки в шапке и в
-    // hero перестанут вести к секции пробного урока.
-    const socialMap = { max: L.max, telegram: L.telegramChannel, vk: L.vk, youtube: L.youtube };
-    const bookingMap = { telegram: L.telegramBooking || L.trialBot, max: L.maxBooking || L.max };
-
-    document.querySelectorAll('[data-social]').forEach(el => applyLink(el, socialMap[el.dataset.social]));
-    document.querySelectorAll('[data-booking]').forEach(el => applyLink(el, bookingMap[el.dataset.booking]));
-
-    document.querySelectorAll('.footer-links a').forEach(a => {
-      const label = a.textContent.trim();
-      if (label === 'Telegram-канал') applyLink(a, L.telegramChannel);
-      if (label === 'Бот для записи') applyLink(a, L.trialBot);
-      if (label === 'Написать Петру') applyLink(a, L.contact);
+    $$('.spot').forEach(el => {
+      el.addEventListener('pointermove', e => {
+        const r = el.getBoundingClientRect();
+        el.style.setProperty('--mx', `${e.clientX - r.left}px`);
+        el.style.setProperty('--my', `${e.clientY - r.top}px`);
+      }, { passive: true });
     });
 
-    // Соцсеть без ссылки просто не показываем — «мёртвая» иконка хуже,
-    // чем её отсутствие.
-    document.querySelectorAll('[data-social]').forEach(el => {
-      if (el.getAttribute('href') === '#') el.hidden = true;
+    $$('.magnetic').forEach(el => {
+      el.addEventListener('pointermove', e => {
+        const r = el.getBoundingClientRect();
+        el.style.setProperty('--bx', `${((e.clientX - r.left) / r.width - 0.5) * 10}px`);
+        el.style.setProperty('--by', `${((e.clientY - r.top) / r.height - 0.5) * 8}px`);
+      }, { passive: true });
+      el.addEventListener('pointerleave', () => {
+        el.style.setProperty('--bx', '0px');
+        el.style.setProperty('--by', '0px');
+      });
     });
+  }
+
+  /* ---------- цели аналитики для записи ---------- */
+  $$('[data-booking]').forEach(a => a.addEventListener('click', () => {
+    const goal = `booking_${a.dataset.booking}`;
+    try { window.ym?.(112295779, 'reachGoal', goal); } catch (_) {}
+    try { window.gtag?.('event', goal); } catch (_) {}
+  }));
+
+  $$('[data-year]').forEach(el => { el.textContent = new Date().getFullYear(); });
+
+  /* ---------- ссылки из data.json (владелец может поменять их там) ---------- */
+  const loadLinks = () => fetch('/data.json').then(r => (r.ok ? r.json() : null)).then(data => {
+    const L = data?.links;
+    if (!L) return;
+    const ok = u => u && u !== '#';
+    const social = { max: L.max, telegram: L.telegramChannel, vk: L.vk, youtube: L.youtube };
+    const booking = { telegram: L.telegramBooking || L.trialBot, max: L.maxBooking || L.max };
+    $$('[data-social]').forEach(a => {
+      const u = social[a.dataset.social];
+      if (ok(u)) { a.href = u; a.hidden = false; }
+    });
+    $$('[data-booking]').forEach(a => { const u = booking[a.dataset.booking]; if (ok(u)) a.href = u; });
   }).catch(() => {});
+  if ('requestIdleCallback' in window) requestIdleCallback(loadLinks, { timeout: 3000 });
+  else setTimeout(loadLinks, 1500);
 })();
